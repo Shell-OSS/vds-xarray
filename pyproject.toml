@@ -10,7 +10,7 @@ authors = [
 maintainers = [
     { name = "Guillermo Vargas", email = "gavargas22@gmail.com" }
 ]
-keywords = ["xarray", "vds", "seismic", "geophysics", "Volume", "data", "backend"]
+keywords = ["xarray", "vds", "seismic", "geophysics", "voluum", "data", "backend"]
 requires-python = ">=3.9,<3.12"
 dependencies = [
     "dask>=2024.8.0",
