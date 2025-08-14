@@ -1,61 +1,78 @@
-# ddni-vdsxarray
+# VDS Xarray Backend
 
-Description: An xarray backend for reading VDS (Volume Data Store) seismic data files
+[![PyPI version](https://badge.fury.io/py/vdsxarray.svg)](https://badge.fury.io/py/vdsxarray)
+[![Python versions](https://img.shields.io/pypi/pyversions/vdsxarray.svg)](https://pypi.org/project/vdsxarray/)
+[![License](https://img.shields.io/github/license/gavargas22/vds-xarray-backend.svg)](https://github.com/gavargas22/vds-xarray-backend/blob/main/LICENSE)
 
-repo-team-owner: @sede-enterprise/teams/admins-subsurface-software-innersource
+An xarray backend for reading VDS (Voluum Data Store) files, commonly used in seismic data processing and geophysical applications.
 
-created-by: Guillermo Vargas (Guillermo.Vargas@shell.com)
+## Installation
 
-# Purpose
-What does this project do? Who is it for?
+Install from PyPI:
+```bash
+pip install vdsxarray
+```
 
-# Getting started / How to run guide
-How do I use this project? How can I build it?
+Using uv:
+```bash
+uv add vdsxarray
+```
 
-# Support and contacts
-Who do you contact if you have trouble? Who moderates?
+For development:
+```bash
+git clone https://github.com/gavargas22/vds-xarray-backend.git
+cd vds-xarray-backend
+uv pip install -e .
+```
 
-# Licensing
-If there is anything special about licensing, mention/reference it here. The default copyright notice is in [LICENSE](LICENSE).
+## Usage
 
-# Contribution
-For support and contributing to the project, refer to [CONTRIBUTION.md](CONTRIBUTION.md).
+```python
+import xarray as xr
 
-# InnerSource
+# Open a VDS file
+ds = xr.open_dataset("path/to/your/file.vds", engine="vds")
 
-## Repository Initialization Overview
+# The dataset will contain seismic data with proper coordinates
+print(ds)
 
-This repository has been **automatically generated** to align with InnerSource best practices. As part of the setup, it includes essential foundational files and configurations to support collaboration, maintainability, and code quality:
+# Access the amplitude data
+amplitude = ds.Amplitude
 
-- `README.md` – **Project overview and usage instructions**  
-- `LICENSE` – **Open source licensing information**  
-- `CODE_OF_CONDUCT.md` – **Guidelines for respectful and inclusive collaboration**  
-- `CONTRIBUTING.md` – **Instructions for contributing to the project**  
-- **Pull Request Templates** – **To standardize PR submissions**  
-- **Issue Templates** – **To streamline bug reports and feature requests**  
-- **SonarQube Configuration** – **For continuous code quality analysis**  
+# Data is lazily loaded and can be used with dask
+print(amplitude.dims)  # ('sample', 'crossline', 'inline')
+print(amplitude.coords)  # Shows coordinate ranges
+```
 
-## Next Steps
+## Features
 
-Please **review and tailor** these files to suit your team’s specific needs and workflows. This ensures clarity, consistency, and alignment with your development goals.
+- **Lazy loading**: Data is loaded on-demand using dask arrays
+- **Proper coordinates**: Automatically extracts inline, crossline, and sample coordinates
+- **Chunking**: Optimized chunk sizes for efficient processing
+- **Metadata**: Includes coordinate ranges and source file information
 
-## Using Copilot to Accelerate InnerSource Compliance
+## Requirements
 
-We’re using GitHub Copilot to make it easier than ever to bring your repository up to InnerSource  standards. With our customized Copilot configuration, developers receive real-time suggestions that align with our required practices—such as including the right documentation, setting up folder structures, and integrating tools like SonarQube.
+- Python >=3.9, <3.12
+- xarray >=2024.7.0
+- openvds >=3.4.6
+- ovds-utils >=0.3.1
+- dask >=2024.8.0
 
-You no longer need to memorize the checklist or copy templates manually. Just start working in your repository and **prompt Copilot with**:
+## Contributing
 
-**Fix my repo to meet InnerSource standards**
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-You can also use further prompts referencing InnerSource:
+## License
 
-**Ensure the repository follows the required folder structure**
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-**Ensure GitHub issue templates are present**
+## Acknowledgments
 
+- Built on top of the excellent [xarray](https://xarray.pydata.org/) library
+- Uses [OpenVDS](https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/seismic/open-vds/) for VDS file access
+- dask >=2024.8.0
 
-## What is GitHub Copilot?
+## License
 
-GitHub Copilot is an AI-powered coding assistant that helps developers write code faster and more efficiently. It works directly within your code editor, offering real-time suggestions based on the context of your code, comments, and file structure. Copilot can autocomplete lines, generate entire functions, and even help write documentation or tests. It supports a wide range of programming languages and frameworks, making it a powerful tool for accelerating development and reducing repetitive tasks.
-
-> **Warning:** Customization should be approached with care. Always review your work and keep documentation up to date to reflect any changes in your standards.
+See LICENSE file.
