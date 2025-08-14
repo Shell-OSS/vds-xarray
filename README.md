@@ -22,7 +22,7 @@ For development:
 ```bash
 git clone https://github.com/gavargas22/vds-xarray-backend.git
 cd vds-xarray-backend
-uv pip install -e .
+uv sync --group dev --group test
 ```
 
 ## Usage
@@ -103,6 +103,53 @@ plt.show()
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+### Development Workflow
+
+1. **Setup development environment:**
+   ```bash
+   git clone https://github.com/gavargas22/vds-xarray-backend.git
+   cd vds-xarray-backend
+   uv sync --group dev --group test
+   ```
+
+2. **Run tests:**
+   ```bash
+   uv run pytest
+   ```
+
+3. **Run linting:**
+   ```bash
+   uv run ruff check .
+   uv run black --check .
+   uv run isort --check-only .
+   ```
+
+### Releasing
+
+This project uses automated releases via GitHub Actions:
+
+**Automated Release (Recommended):**
+1. Use the release helper script:
+   ```bash
+   ./scripts/release.sh
+   ```
+   This will update versions, run tests, and create a tag to trigger the release.
+
+**Manual Release:**
+1. Update version in `pyproject.toml` and `vdsxarray/__init__.py`
+2. Create and push a tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+3. GitHub Actions will automatically:
+   - Build the package
+   - Create a GitHub release with wheel files
+   - Publish to PyPI (for stable releases)
+
+**Manual Release Workflow:**
+You can also use the GitHub Actions manual release workflow to create releases with custom options.
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
@@ -111,8 +158,4 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 - Built on top of the excellent [xarray](https://xarray.pydata.org/) library
 - Uses [OpenVDS](https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/seismic/open-vds/) for VDS file access
-- dask >=2024.8.0
-
-## License
-
-See LICENSE file.
+- Powered by [dask](https://dask.org/) for lazy loading and parallel computing

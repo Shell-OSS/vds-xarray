@@ -1,0 +1,172 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.1)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  manual-release:
+    name: Create Manual Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+        
+    - name: Set up Python
+      run: uv python install 3.11
+      
+    - name: Install dependencies
+      run: uv sync --group publish --group test
+      
+    - name: Update version in files
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        echo "📝 Updating version to $VERSION"
+        
+        # Update pyproject.toml
+        sed -i "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+        
+        # Update __init__.py
+        sed -i "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" vdsxarray/__init__.py
+        
+        echo "✅ Version updated in all files"
+        
+    - name: Run tests
+      run: |
+        echo "🧪 Running tests..."
+        uv run pytest tests/ -v
+        echo "✅ Tests passed"
+        
+    - name: Build package
+      run: |
+        echo "🔨 Building package..."
+        uv run python -m build
+        echo "📦 Built files:"
+        ls -la dist/
+        
+    - name: Validate package
+      run: |
+        echo "🔍 Validating package..."
+        uv run twine check dist/*
+        echo "✅ Package validation passed"
+        
+    - name: Generate checksums
+      run: |
+        echo "🔐 Generating checksums..."
+        cd dist
+        sha256sum * > SHA256SUMS
+        echo "📋 Checksums:"
+        cat SHA256SUMS
+        
+    - name: Create tag
+      run: |
+        VERSION="v${{ github.event.inputs.version }}"
+        echo "🏷️ Creating tag $VERSION"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a "$VERSION" -m "Release $VERSION"
+        git push origin "$VERSION"
+        
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ github.event.inputs.version }}
+        name: Release v${{ github.event.inputs.version }}
+        body: |
+          ## 🚀 VDS Xarray Backend v${{ github.event.inputs.version }}
+          
+          This is a manual release created from commit ${{ github.sha }}.
+          
+          ### 📦 Installation
+          
+          ```bash
+          pip install vdsxarray==${{ github.event.inputs.version }}
+          ```
+          
+          Or using uv:
+          ```bash
+          uv add vdsxarray==${{ github.event.inputs.version }}
+          ```
+          
+          ### 📋 Release Assets
+          
+          This release includes:
+          
+          - **Source distribution (`.tar.gz`)**: For installation from source
+          - **Universal wheel (`.whl`)**: For fast installation with pip
+          - **SHA256SUMS**: Checksums for file verification
+          
+          ### 🔐 Verification
+          
+          To verify the integrity of downloaded files:
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+          
+          ### 📚 Documentation
+          
+          - [📖 User Guide](https://github.com/${{ github.repository }}/blob/main/docs/USER-GUIDE.md)
+          - [🔧 Technical Overview](https://github.com/${{ github.repository }}/blob/main/docs/TECHNICAL-OVERVIEW.md)
+          - [❓ Why Xarray?](https://github.com/${{ github.repository }}/blob/main/docs/WHY-XARRAY.md)
+          - [📓 Example Notebook](https://github.com/${{ github.repository }}/blob/main/notebooks/vds-xarray-complete-example.ipynb)
+          
+          ### 🤝 Contributing
+          
+          Contributions are welcome! See our [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md).
+        files: |
+          dist/*
+        draft: ${{ github.event.inputs.draft }}
+        prerelease: ${{ github.event.inputs.prerelease }}
+        generate_release_notes: false
+        make_latest: ${{ !github.event.inputs.prerelease }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload to PyPI (if not pre-release or draft)
+      if: ${{ !github.event.inputs.prerelease && !github.event.inputs.draft }}
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        skip-existing: true
+        
+    - name: Summary
+      run: |
+        echo "## 🎉 Manual Release Created" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** v${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Pre-release:** ${{ github.event.inputs.prerelease }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Draft:** ${{ github.event.inputs.draft }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Release URL:** ${{ steps.create_release.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Package Files" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        cd dist
+        for file in *; do
+          size=$(ls -lh "$file" | awk '{print $5}')
+          echo "- **$file** ($size)" >> $GITHUB_STEP_SUMMARY
+        done
