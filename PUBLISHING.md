@@ -2,7 +2,63 @@
 
 This document describes how to publish vdsxarray to PyPI.
 
-## Prerequisites
+## Automated Publishing (Recommended)
+
+The project is set up with GitHub Actions for automated testing, building, and publishing.
+
+### Setup Required Secrets
+
+1. **PyPI API Token**:
+   - Go to https://pypi.org/manage/account/token/
+   - Create a new API token with scope for this project
+   - Add it as a GitHub secret named `PYPI_API_TOKEN`
+
+2. **TestPyPI API Token** (optional):
+   - Go to https://test.pypi.org/manage/account/token/
+   - Create a new API token
+   - Add it as a GitHub secret named `TEST_PYPI_API_TOKEN`
+
+### Release Process
+
+1. **Update version numbers**:
+   - `pyproject.toml` → `project.version`
+   - `vdsxarray/__init__.py` → `__version__`
+   - `CHANGELOG.md` → Add new release section
+
+2. **Create and push a version tag**:
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+
+3. **The automation will**:
+   - Validate version consistency
+   - Run all tests across Python versions
+   - Build the package
+   - Create a GitHub release
+   - Publish to PyPI
+
+### GitHub Actions Workflows
+
+- **`ci-cd.yml`**: Main CI/CD pipeline
+  - Runs tests on Python 3.9, 3.10, 3.11
+  - Linting and formatting checks
+  - Builds packages
+  - Publishes to TestPyPI on main branch pushes
+  - Publishes to PyPI on releases
+
+- **`release.yml`**: Release validation and GitHub release creation
+  - Validates version consistency across files
+  - Checks CHANGELOG.md entries
+  - Creates GitHub releases with release notes
+
+- **`dependencies.yml`**: Dependency management
+  - Weekly dependency updates
+  - Security audits
+
+## Manual Publishing (Fallback)
+
+### Prerequisites
 
 1. Install publishing dependencies:
 ```bash

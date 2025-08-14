@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+
+jobs:
+  validate-release:
+    name: Validate release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+        
+    - name: Set up Python
+      run: uv python install 3.11
+      
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Check version consistency
+      run: |
+        TAG_VERSION=${{ steps.get_version.outputs.VERSION }}
+        
+        # Check pyproject.toml version
+        PYPROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+        if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+          echo "Version mismatch: tag=$TAG_VERSION, pyproject.toml=$PYPROJECT_VERSION"
+          exit 1
+        fi
+        
+        # Check __init__.py version
+        INIT_VERSION=$(grep -E '^__version__ = ' vdsxarray/__init__.py | sed 's/__version__ = "\(.*\)"/\1/')
+        if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
+          echo "Version mismatch: tag=$TAG_VERSION, __init__.py=$INIT_VERSION"
+          exit 1
+        fi
+        
+        echo "✅ All versions match: $TAG_VERSION"
+        
+    - name: Check CHANGELOG
+      run: |
+        TAG_VERSION=${{ steps.get_version.outputs.VERSION }}
+        if ! grep -q "## \[$TAG_VERSION\]" CHANGELOG.md; then
+          echo "❌ CHANGELOG.md does not contain entry for version $TAG_VERSION"
+          exit 1
+        fi
+        echo "✅ CHANGELOG.md contains entry for $TAG_VERSION"
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-release]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+        
+    - name: Set up Python
+      run: uv python install 3.11
+      
+    - name: Install dependencies
+      run: uv sync --group publish
+      
+    - name: Build package
+      run: uv run python -m build
+      
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Extract changelog for this version
+      id: changelog
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        # Extract changelog section for this version
+        sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+        # Remove the version header line
+        tail -n +2 release_notes.md > release_notes_clean.md
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        cat release_notes_clean.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release v${{ steps.get_version.outputs.VERSION }}
+        body: ${{ steps.changelog.outputs.CHANGELOG }}
+        files: |
+          dist/*
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'alpha') || contains(steps.get_version.outputs.VERSION, 'beta') || contains(steps.get_version.outputs.VERSION, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
