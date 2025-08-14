@@ -4,7 +4,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/vdsxarray.svg)](https://pypi.org/project/vdsxarray/)
 [![License](https://img.shields.io/github/license/gavargas22/vds-xarray-backend.svg)](https://github.com/gavargas22/vds-xarray-backend/blob/main/LICENSE)
 
-An xarray backend for reading VDS (Voluum Data Store) files, commonly used in seismic data processing and geophysical applications.
+An xarray backend for reading VDS (Volume Data Store) files, commonly used in seismic data processing and geophysical applications.
 
 ## Installation
 
@@ -50,6 +50,46 @@ print(amplitude.coords)  # Shows coordinate ranges
 - **Proper coordinates**: Automatically extracts inline, crossline, and sample coordinates
 - **Chunking**: Optimized chunk sizes for efficient processing
 - **Metadata**: Includes coordinate ranges and source file information
+
+## 📚 Documentation
+
+For comprehensive documentation, examples, and technical details, see our [documentation directory](docs/):
+
+- **[Why Xarray?](docs/WHY-XARRAY.md)** - Understanding the benefits and motivation
+- **[User Guide](docs/USER-GUIDE.md)** - Practical examples and workflows  
+- **[Technical Overview](docs/TECHNICAL-OVERVIEW.md)** - Architecture and implementation details
+
+## Quick Example
+
+```python
+import xarray as xr
+import matplotlib.pyplot as plt
+
+# Open VDS file
+ds = xr.open_dataset("survey.vds", engine="vds")
+
+# Explore the dataset
+print(f"Survey dimensions: {dict(ds.dims)}")
+print(f"Coordinate ranges:")
+print(f"  Inline: {ds.inline.min().values} - {ds.inline.max().values}")
+print(f"  Crossline: {ds.crossline.min().values} - {ds.crossline.max().values}")
+print(f"  Sample: {ds.sample.min().values} - {ds.sample.max().values} ms")
+
+# Visualize seismic section
+ds.Amplitude.sel(inline=1500).plot(
+    x='crossline', y='sample', 
+    cmap='seismic', robust=True
+)
+plt.gca().invert_yaxis()  # Time increases downward
+plt.title('Seismic Section - Inline 1500')
+plt.show()
+
+# Calculate and plot RMS amplitude map
+rms_amp = (ds.Amplitude ** 2).mean('sample') ** 0.5
+rms_amp.plot(x='crossline', y='inline', cmap='viridis')
+plt.title('RMS Amplitude Map')
+plt.show()
+```
 
 ## Requirements
 
