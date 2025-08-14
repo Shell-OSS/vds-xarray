@@ -1,17 +1,26 @@
 # VDS Xarray Backend
 
-An xarray backend for reading VDS (Voluum Data Store) files, commonly used in seismic data processing.
+[![PyPI version](https://badge.fury.io/py/vdsxarray.svg)](https://badge.fury.io/py/vdsxarray)
+[![Python versions](https://img.shields.io/pypi/pyversions/vdsxarray.svg)](https://pypi.org/project/vdsxarray/)
+[![License](https://img.shields.io/github/license/gavargas22/vds-xarray-backend.svg)](https://github.com/gavargas22/vds-xarray-backend/blob/main/LICENSE)
+
+An xarray backend for reading VDS (Voluum Data Store) files, commonly used in seismic data processing and geophysical applications.
 
 ## Installation
 
-Using uv:
+Install from PyPI:
 ```bash
-uv pip install vdsxarray
+pip install vdsxarray
 ```
 
-Or for development:
+Using uv:
 ```bash
-git clone <repo-url>
+uv add vdsxarray
+```
+
+For development:
+```bash
+git clone https://github.com/gavargas22/vds-xarray-backend.git
 cd vds-xarray-backend
 uv pip install -e .
 ```
@@ -48,6 +57,20 @@ print(amplitude.coords)  # Shows coordinate ranges
 - xarray >=2024.7.0
 - openvds >=3.4.6
 - ovds-utils >=0.3.1
+- dask >=2024.8.0
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built on top of the excellent [xarray](https://xarray.pydata.org/) library
+- Uses [OpenVDS](https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/seismic/open-vds/) for VDS file access
 - dask >=2024.8.0
 
 ## License
