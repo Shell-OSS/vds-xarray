@@ -1,67 +1,68 @@
 import numpy as np
 import xarray as xr
-from xarray.backends import BackendEntrypoint, BackendArray
-from xarray.core import indexing
 from ovds_utils.vds import VDS, Formats
-from typing import Any
+from xarray.backends import BackendArray, BackendEntrypoint
+from xarray.core import indexing
 
 
 def get_annotated_coordinates(vds: VDS):
     """
     Extract coordinate arrays from a VDS object.
-    
-    This function generates coordinate arrays for inline, crossline, and sample 
+
+    This function generates coordinate arrays for inline, crossline, and sample
     dimensions based on the VDS axes properties and shape information.
-    
+
     Parameters
     ----------
     vds : VDS
-        A VDS object containing axes information with coordinate_min, coordinate_max 
+        A VDS object containing axes information with coordinate_min, coordinate_max
         properties and shape information for each dimension.
-        
+
     Returns
     -------
     tuple[np.ndarray, np.ndarray, np.ndarray]
         A tuple containing three numpy arrays:
         - samples : np.ndarray of float32
             Sample coordinates array (axis 0 - usually time/depth)
-        - xlines : np.ndarray of int16  
+        - xlines : np.ndarray of int16
             Crossline coordinates array (axis 1)
         - ilines : np.ndarray of int16
             Inline coordinates array (axis 2)
-            
+
     Notes
     -----
     The function assumes a 3D seismic volume with:
     - Sample coordinates correspond to vds.axes[0] (time/depth)
-    - Crossline coordinates correspond to vds.axes[1] 
+    - Crossline coordinates correspond to vds.axes[1]
     - Inline coordinates correspond to vds.axes[2]
     """
     inlines = np.linspace(
         start=vds.axes[0].coordinate_min,
         stop=vds.axes[0].coordinate_max,
         num=vds.shape[0],
-        dtype=np.int16
+        dtype=np.int16,
     )
 
     xlines = np.linspace(
         start=vds.axes[1].coordinate_min,
         stop=vds.axes[1].coordinate_max,
         num=vds.shape[1],
-        dtype=np.int16
+        dtype=np.int16,
     )
 
     samples = np.linspace(
         start=vds.axes[2].coordinate_min,
         stop=vds.axes[2].coordinate_max,
         num=vds.shape[2],
-        dtype=np.float32
+        dtype=np.float32,
     )
-    
+
     return inlines, xlines, samples
+
 
 def get_cdp_coordinates(vds: VDS):
     pass
+
 
 class VdsBackendArray(BackendArray):
     def __init__(
@@ -74,7 +75,8 @@ class VdsBackendArray(BackendArray):
         self.dtype = np.dtype("float32")
 
     def __getitem__(
-        self, key: indexing.ExplicitIndexer,
+        self,
+        key: indexing.ExplicitIndexer,
     ) -> np.typing.ArrayLike:
         return indexing.explicit_indexing_adapter(
             key,
@@ -82,7 +84,7 @@ class VdsBackendArray(BackendArray):
             indexing.IndexingSupport.VECTORIZED,
             self._raw_indexing_method,
         )
-    
+
     def _raw_indexing_method(self, key: tuple) -> np.typing.ArrayLike:
         def get_min_max(idx, dim_size):
             if isinstance(idx, slice):
@@ -97,7 +99,7 @@ class VdsBackendArray(BackendArray):
             return np.amin(min_idx), np.amax(max_idx)
 
         min_ilines, max_ilines = get_min_max(key[0], self.vds_reader.shape[0])
-        min_xlines, max_xlines = get_min_max(key[1], self.vds_reader.shape[1]) 
+        min_xlines, max_xlines = get_min_max(key[1], self.vds_reader.shape[1])
         min_samples, max_samples = get_min_max(key[2], self.vds_reader.shape[2])
 
         data = self.vds_reader[
@@ -111,7 +113,7 @@ class VdsBackendArray(BackendArray):
         return data
 
 
-class VdsEngine(BackendEntrypoint):    
+class VdsEngine(BackendEntrypoint):
     def open_dataset(
         self,
         filename_or_obj,
@@ -125,7 +127,7 @@ class VdsEngine(BackendEntrypoint):
     ):
         """
         Open a VDS dataset as an xarray Dataset.
-        
+
         Parameters
         ----------
         filename_or_obj : str or Path
@@ -142,7 +144,7 @@ class VdsEngine(BackendEntrypoint):
             Level of detail
         calculate_cdp : bool, default False
             Whether to calculate CDP coordinates
-            
+
         Returns
         -------
         xarray.Dataset
@@ -158,40 +160,33 @@ class VdsEngine(BackendEntrypoint):
         # Get annotated coordinate axis
         coords = get_annotated_coordinates(vds=vds)
         dims = ("inline", "crossline", "sample")
-        
+
         # Using ovds-utils open up the VDS file
-        backend_array = VdsBackendArray(
-            vds_reader=vds,
-            dtype=Formats.R32
-        )
+        backend_array = VdsBackendArray(vds_reader=vds, dtype=Formats.R32)
         # Set the format
         vds.channel(0).format = Formats.R32
-        
+
         data = indexing.LazilyIndexedArray(backend_array)
-        
+
         # Create attributes
         attrs = {
-            'source_file': str(filename_or_obj),
-            'shape': vds.shape,
-            'coordinate_ranges': {
-                'inline': [coords[0].min(), coords[0].max()],
-                'crossline': [coords[1].min(), coords[1].max()], 
-                'sample': [coords[2].min(), coords[2].max()],
-            }
+            "source_file": str(filename_or_obj),
+            "shape": vds.shape,
+            "coordinate_ranges": {
+                "inline": [int(coords[0].min()), int(coords[0].max())],
+                "crossline": [int(coords[1].min()), int(coords[1].max())],
+                "sample": [int(coords[2].min()), int(coords[2].max())],
+            },
         }
-        
+
         seismic_data = xr.DataArray(
-            data=data,
-            coords=coords,
-            dims=dims,
-            name=name,
-            attrs=attrs
+            data=data, coords=coords, dims=dims, name=name, attrs=attrs
         )
-        
+
         # Set an encoding with reasonable chunk sizes
         # from .utils import estimate_chunk_size
         # chunk_sizes = estimate_chunk_size(vds.shape)
-        
+
         # encoding = {
         #     "preferred_chunks": chunk_sizes
         # }
@@ -199,9 +194,9 @@ class VdsEngine(BackendEntrypoint):
 
         ds = xr.Dataset({f"{seismic_data.name}": seismic_data})
         ds.attrs = {
-            'title': f'VDS Seismic Data: {name}',
-            'source': str(filename_or_obj),
-            'created_with': 'vdsxarray'
+            "title": f"VDS Seismic Data: {name}",
+            "source": str(filename_or_obj),
+            "created_with": "vdsxarray",
         }
 
         # Clean up VDS resources
@@ -237,8 +232,6 @@ class VdsEngine(BackendEntrypoint):
         verify the actual file format or contents.
         """
         # Implement logic to guess if the file can be opened by this engine
-        if isinstance(filename_or_obj, str) and filename_or_obj.endswith(
-            ".vds"
-        ):
+        if isinstance(filename_or_obj, str) and filename_or_obj.endswith(".vds"):
             return True
         return False

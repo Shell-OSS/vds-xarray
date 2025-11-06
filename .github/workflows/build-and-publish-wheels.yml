@@ -1,0 +1,259 @@
+name: Build and Upload Wheels to Artifactory
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  create-tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: extract
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag (overwrite if exists)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v${{ steps.extract.outputs.version }}"
+          # Create or update the annotated tag locally (force)
+          git tag -f -a "$TAG" -m "Release ${TAG}"
+          # Force-push the tag to origin to overwrite remote tag if it exists
+          git push --force origin "$TAG"
+
+  build-wheels:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+        
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install build dependencies
+        run: uv sync --group publish
+
+      - name: Build wheel only
+        run: |
+          echo "🔨 Building wheel..."
+          uv run python -m build --wheel
+          echo "📦 Built files:"
+          ls -la dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  collect-and-publish:
+    needs: [build-wheels]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: extract
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist
+
+      - name: Show collected files
+        run: |
+          echo "📦 Collected files:"
+          ls -la dist/
+
+      - name: Generate checksums
+        run: |
+          echo "🔐 Generating checksums..."
+          cd dist
+          sha256sum * > SHA256SUMS
+          echo "📋 Checksums:"
+          cat SHA256SUMS
+
+      - name: Wait for release to be ready
+        run: sleep 10
+
+      - name: Delete existing release if present
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          TAG="v${{ steps.extract.outputs.version }}"
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; deleting to allow overwrite"
+            gh release delete "$TAG" --yes
+          else
+            echo "No existing release $TAG"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Create release in GitHub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.extract.outputs.version }}
+          files: dist/*
+          name: Release v${{ steps.extract.outputs.version }}
+          body: |
+            Release created from commit: ${{ github.sha }}
+            - ${{ github.event.head_commit.message }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  start-runner:
+    needs: [collect-and-publish]
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: extract
+        run: |
+          # Extract version using pure bash (sed).
+          version=""
+
+          # Try to extract version within the [project] table
+          version=$(sed -n '/^[[:space:]]*\[project\][[:space:]]*$/,/^[[:space:]]*\[/{/^[[:space:]]*version[[:space:]]*=/p}' pyproject.toml \
+            | sed -n -E "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*['\"]([^'\"]*)['\"].*/\1/p;q" || true)
+
+          echo "version=${version}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: sede-enterprise/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.PAT_TOKEN }}
+          ec2-image-id: ${{ vars.AWS_BUILDER_AMI }}
+          ec2-instance-type: ${{ vars.AWS_INSTANCE_TYPE }}
+          subnet-id: ${{ vars.AWS_SUBNET_ID }}
+          security-group-id: ${{ vars.AWS_SECURITY_GROUP_ID }}
+          aws-resource-tags: >
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
+  upload-to-artifactory:
+    needs:
+      - start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    steps:
+      - name: Checkout (needed for gh cli config)
+        uses: actions/checkout@v4
+
+      - name: Install JFrog CLI
+        run: |
+          curl -fL https://getcli.jfrog.io | sh
+          sudo mv jfrog /usr/local/bin/jfrog
+
+      - name: Configure JFrog CLI
+        run: |
+          jfrog config add gs --basic-auth-only --url "https://artifactory.geosigns.shell.com" --user ${{ secrets.GEOSIGNS_ARTIFACTORY_USERNAME }} --password ${{ secrets.GEOSIGNS_ARTIFACTORY_PASSWORD }} || true
+          jfrog config use gs || true
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          path: artifacts
+          name: wheel
+
+      - name: Show downloaded files
+        run: ls -R ./artifacts || true
+
+      - name: Upload wheels to Artifactory
+        env:
+          VERSION: ${{ needs.start-runner.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Find all wheel files
+          mapfile -t wheels < <(find artifacts -type f -name "*.whl")
+          if [ ${#wheels[@]} -eq 0 ]; then
+            echo "No .whl files found under artifacts/ - aborting"
+            exit 1
+          fi
+
+          REPO="dgeo-team-pypi/vdsxarray/${VERSION}/"
+          echo "Target Artifactory repo: ${REPO}"
+
+          # Delete any existing files for this version in Artifactory so uploads replace previous artifacts
+          echo "Deleting existing Artifactory files under ${REPO} (if any)"
+          jfrog rt del "${REPO}*" --quiet || true
+
+          uploaded=0
+          for w in "${wheels[@]}"; do
+            echo "Uploading ${w} to Artifactory ${REPO}"
+            jfrog rt u "${w}" "${REPO}" --flat=true
+            uploaded=$((uploaded+1))
+          done
+
+          if [ "${uploaded}" -gt 0 ]; then
+            echo "Uploaded ${uploaded} wheel(s) to ${REPO}"
+            exit 0
+          else
+            echo "No wheels uploaded; failing"
+            exit 1
+          fi
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner
+      - upload-to-artifactory
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Stop EC2 runner
+        uses: sede-enterprise/ec2-github-runner@v2
+        with:
+          mode: stop
+          github-token: ${{ secrets.PAT_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
