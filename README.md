@@ -150,7 +150,7 @@ This project uses automated releases via GitHub Actions:
 **Manual Release Workflow:**
 You can also use the GitHub Actions manual release workflow to create releases with custom options.
 
-**This line will be removed, it is only for testing PRs**
+**This line will be removed, it is only for testing PRs.**
 
 ## License
 
