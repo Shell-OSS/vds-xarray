@@ -150,6 +150,8 @@ This project uses automated releases via GitHub Actions:
 **Manual Release Workflow:**
 You can also use the GitHub Actions manual release workflow to create releases with custom options.
 
+**This line will be removed, it is only for testing PRs**
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
