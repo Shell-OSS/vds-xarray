@@ -36,3 +36,9 @@ venv.bak/
 
 # macOS
 .DS_Store
+
+# Sphinx build output
+docs/build/
+
+ignore/
+uv.lock
